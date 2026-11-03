@@ -1,30 +1,52 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+/**
+ * @file Navbar.jsx
+ * @description Floating smart-scroll glassmorphic navbar.
+ * Automatically slides up and hides when scrolling down, and slides back down into view when scrolling up.
+ * Boundary-clamped to prevent any bounce / jitter when reaching maximum scroll boundaries.
+ * Displays strictly the project logo and brand name, big and centered.
+ * @authors Nisarg Jayesh Delvadiya, Rishan Mazumdar
+ */
+
+import React, { useState, useEffect, useRef } from 'react';
 import Logo from './Logo';
 
-/**
- * Centered Dynamic Floating Navbar with Dedicated Logo, Brand Name & Slogan.
- */
 export default function Navbar() {
   const [isVisible, setIsVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
 
   useEffect(() => {
-    let lastScrollY = window.scrollY;
-
     const handleScroll = () => {
       const currentScrollY = window.scrollY;
-      const delta = currentScrollY - lastScrollY;
+      const prevScrollY = lastScrollYRef.current;
 
-      if (currentScrollY <= 5) {
+      // Ignore negative scroll values (overscroll bounce at top)
+      if (currentScrollY <= 0) {
         setIsVisible(true);
-      } else if (delta > 2) {
+        lastScrollYRef.current = 0;
+        return;
+      }
+
+      // Ignore overscroll bounce at the bottom of the page
+      const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+      if (currentScrollY >= maxScroll - 15) {
+        lastScrollYRef.current = currentScrollY;
+        return;
+      }
+
+      // Always show near top of page
+      if (currentScrollY < 30) {
+        setIsVisible(true);
+      } else if (currentScrollY > prevScrollY && currentScrollY - prevScrollY > 8) {
+        // Scrolling down -> slide up and hide
         setIsVisible(false);
-      } else if (delta < -2) {
+      } else if (currentScrollY < prevScrollY && prevScrollY - currentScrollY > 8) {
+        // Scrolling up -> slide down and show
         setIsVisible(true);
       }
 
-      lastScrollY = currentScrollY;
+      lastScrollYRef.current = currentScrollY;
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -33,34 +55,24 @@ export default function Navbar() {
 
   return (
     <header
-      className={`fixed top-3 sm:top-4 left-0 right-0 z-50 px-3 sm:px-4 flex justify-center pointer-events-none transition-all duration-300 ease-in-out ${
-        isVisible ? 'translate-y-0 opacity-100' : '-translate-y-24 opacity-0'
+      className={`fixed top-4 sm:top-5 left-0 right-0 z-50 flex justify-center pointer-events-none px-4 transition-all duration-300 ease-in-out ${
+        isVisible
+          ? 'translate-y-0 opacity-100'
+          : '-translate-y-28 opacity-0 pointer-events-none'
       }`}
     >
       <nav
-        title="OptiTour: Untangling complexity. Finding the shortest path."
+        title="OptiTour — Intelligent Route Architecture"
         aria-label="OptiTour navigation header"
-        className="pointer-events-auto max-w-[calc(100vw-1.5rem)] rounded-full bg-[#080b11]/90 backdrop-blur-2xl border border-white/[0.12] shadow-[0_8px_32px_rgba(0,0,0,0.5)] px-4 sm:px-6 py-1.5 sm:py-2 flex items-center justify-center gap-2.5 sm:gap-3 transition-all hover:border-emerald-500/30"
+        className="pointer-events-auto rounded-full bg-zinc-900/70 backdrop-blur-2xl border border-white/[0.12] shadow-[0_12px_40px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.18)] px-8 sm:px-10 py-3 sm:py-3.5 flex items-center justify-center gap-3.5 hover:border-white/[0.22] hover:bg-zinc-900/80 transition-all duration-300 select-none"
       >
-        {/* Dedicated Vector Logo */}
-        <Logo className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+        {/* Project Logo - Big & Glowing */}
+        <Logo className="w-8 h-8 sm:w-9 sm:h-9 text-emerald-400 flex-shrink-0 drop-shadow-[0_0_16px_rgba(16,185,129,0.5)]" />
 
-        {/* Dedicated Brand Name & Slogan */}
-        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-          <div className="flex items-baseline gap-1.5">
-            <h1 className="text-xs sm:text-sm font-bold tracking-tight text-white font-mono flex items-center">
-              OptiTour
-              <span className="inline-block w-1.5 h-3 bg-emerald-400/80 animate-pulse ml-1" />
-            </h1>
-          </div>
-
-          <div className="h-3 w-px bg-white/10 hidden sm:block flex-shrink-0" />
-
-          {/* Slogan */}
-          <span className="text-[10px] text-zinc-400 hidden sm:inline font-mono tracking-tight truncate">
-            Untangling complexity. Finding the shortest path.
-          </span>
-        </div>
+        {/* Project Name - Big, Bold & Centered */}
+        <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-display">
+          OptiTour
+        </span>
       </nav>
     </header>
   );

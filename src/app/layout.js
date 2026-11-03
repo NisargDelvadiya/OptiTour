@@ -1,14 +1,13 @@
-import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
-
+/**
+ * @file layout.js
+ * @description Root layout, SEO metadata, and typography configuration for OptiTour.
+ * Enforces overscroll-none to disable rubber-band bouncing on max scroll.
+ * @authors Nisarg Jayesh Delvadiya, Rishan Mazumdar
+ */
 export const metadata = {
-  title: "OptiTour // Finding the Shortest Path",
+  title: "OptiTour — Intelligent Route Architecture",
   description:
     "OptiTour is an interactive Travelling Salesperson Route Visualizer powered by Hill Climbing and 2-Opt local search heuristics. Created by Nisarg Jayesh Delvadiya and Rishan Mazumdar.",
   keywords: [
@@ -35,11 +34,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html
-      lang="en"
-      className={`${jetbrainsMono.variable} h-full antialiased dark`}
-    >
-      <body className="min-h-full flex flex-col font-mono bg-[#080b11] text-zinc-200">
+    <html lang="en" className="h-full antialiased dark overscroll-none">
+      <body className="min-h-full flex flex-col font-sans text-zinc-100 antialiased selection:bg-white selection:text-black overscroll-none overflow-x-hidden">
         {children}
       </body>
     </html>

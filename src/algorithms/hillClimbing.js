@@ -1,10 +1,11 @@
 /**
  * @file hillClimbing.js
- * @description Hill Climbing (Local Search) algorithm for Travelling Salesperson Problem (TSP) using 2-Opt edge inversion.
+ * @description Hill Climbing (Local Search) algorithm for Travelling Salesperson Problem (TSP) using 2-Opt edge inversion,
+ * Nearest-Neighbor greedy baseline construction, and multi-restart heuristics.
  * @authors Nisarg Jayesh Delvadiya, Rishan Mazumdar
  */
 
-import { calculateTourDistanceByIndices } from './distance.js';
+import { calculateTourDistanceByIndices, calculateEuclideanDistance } from './distance.js';
 
 /**
  * Performs a 2-Opt edge inversion move on a tour.
@@ -69,6 +70,107 @@ export function generateRandomTour(cityCount) {
 }
 
 /**
+ * Constructs a tour using the greedy Nearest Neighbor heuristic.
+ * This is the classic real-world logistics industry baseline before 2-Opt refinement.
+ *
+ * @param {Array<{x: number, y: number}>} cities
+ * @param {number} [startCityIndex=0] Index of starting depot
+ * @returns {number[]} Greedy tour permutation
+ */
+export function generateNearestNeighborTour(cities, startCityIndex = 0) {
+  if (!Array.isArray(cities) || cities.length < 2) {
+    return Array.from({ length: cities ? cities.length : 0 }, (_, i) => i);
+  }
+
+  const n = cities.length;
+  const visited = new Set();
+  const start = Math.max(0, Math.min(startCityIndex, n - 1));
+  const tour = [start];
+  visited.add(start);
+
+  let current = start;
+
+  while (tour.length < n) {
+    let nearestIndex = -1;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < n; i++) {
+      if (!visited.has(i)) {
+        const d = calculateEuclideanDistance(cities[current], cities[i]);
+        if (d < minDistance) {
+          minDistance = d;
+          nearestIndex = i;
+        }
+      }
+    }
+
+    if (nearestIndex !== -1) {
+      tour.push(nearestIndex);
+      visited.add(nearestIndex);
+      current = nearestIndex;
+    } else {
+      break;
+    }
+  }
+
+  return tour;
+}
+
+/**
+ * Instantly solves full 2-Opt to convergence (useful for instantaneous dispatch).
+ *
+ * @param {Array<{x: number, y: number}>} cities
+ * @param {number[]} [initialTour]
+ * @param {number} [maxIterations=1000]
+ * @returns {{tour: number[], distance: number, improvementsCount: number}}
+ */
+export function solveInstantTwoOpt(cities, initialTour = null, maxIterations = 1000) {
+  if (!Array.isArray(cities) || cities.length < 3) {
+    const defaultTour = Array.isArray(cities) ? cities.map((_, i) => i) : [];
+    return {
+      tour: defaultTour,
+      distance: calculateTourDistanceByIndices(defaultTour, cities),
+      improvementsCount: 0,
+    };
+  }
+
+  let tour = initialTour ? [...initialTour] : generateNearestNeighborTour(cities, 0);
+  let bestDistance = calculateTourDistanceByIndices(tour, cities);
+  let improved = true;
+  let iterations = 0;
+  let improvementsCount = 0;
+  const n = tour.length;
+
+  while (improved && iterations < maxIterations) {
+    improved = false;
+    iterations++;
+
+    for (let i = 0; i < n - 1; i++) {
+      for (let j = i + 1; j < n; j++) {
+        // Delta evaluation: 2-Opt edge swap delta
+        const candidateTour = applyTwoOpt(tour, i, j);
+        const candidateDist = calculateTourDistanceByIndices(candidateTour, cities);
+
+        if (candidateDist < bestDistance - 0.001) {
+          tour = candidateTour;
+          bestDistance = candidateDist;
+          improved = true;
+          improvementsCount++;
+          break;
+        }
+      }
+      if (improved) break;
+    }
+  }
+
+  return {
+    tour,
+    distance: bestDistance,
+    improvementsCount,
+  };
+}
+
+/**
  * HillClimbingRunner class manages iterative step-by-step optimization
  * with Steepest Ascent, First Choice, and Random-Restart heuristics.
  */
@@ -80,6 +182,7 @@ export class HillClimbingRunner {
    * @param {'steepest'|'first_choice'|'random_restart'} [options.strategy='steepest'] Search strategy
    * @param {number} [options.sampleNeighbors=50] Number of neighbor moves evaluated per step
    * @param {number} [options.maxPatienceBeforeRestart=40] Tries before triggering a random restart
+   * @param {boolean} [options.startWithGreedy=false] Initialize from Nearest Neighbor instead of random
    */
   constructor(cities, options = {}) {
     this.cities = Array.isArray(cities) ? cities : [];
@@ -87,6 +190,7 @@ export class HillClimbingRunner {
     this.strategy = options.strategy || 'steepest';
     this.sampleNeighbors = Math.max(5, options.sampleNeighbors || 50);
     this.maxPatienceBeforeRestart = Math.max(10, options.maxPatienceBeforeRestart || 40);
+    this.startWithGreedy = Boolean(options.startWithGreedy);
 
     this.iteration = 0;
     this.currentTour = [];
@@ -98,22 +202,34 @@ export class HillClimbingRunner {
     this.restartsCount = 0;
     this.stuckCounter = 0;
     this.isLocalOptimum = false;
+    this.improvementsCount = 0;
 
     this.init();
   }
 
   /**
-   * Initializes the search with a random valid tour permutation.
+   * Initializes the search with a provided tour, greedy tour, or deterministic sequence.
+   * Avoids non-deterministic Math.random() during initial render to prevent SSR hydration mismatch.
+   *
+   * @param {number[]} [customTour] Optional pre-configured tour permutation
    */
-  init() {
+  init(customTour = null) {
     this.iteration = 0;
     this.localOptimaCount = 0;
     this.restartsCount = 0;
     this.stuckCounter = 0;
     this.isLocalOptimum = false;
+    this.improvementsCount = 0;
 
     if (this.cities.length >= 2) {
-      this.currentTour = generateRandomTour(this.cities.length);
+      if (Array.isArray(customTour) && customTour.length === this.cities.length) {
+        this.currentTour = [...customTour];
+      } else if (this.startWithGreedy) {
+        this.currentTour = generateNearestNeighborTour(this.cities, 0);
+      } else {
+        // Deterministic natural stop sequence [0, 1, 2, ... N-1] ensures identical SSR and client hydration
+        this.currentTour = Array.from({ length: this.cities.length }, (_, i) => i);
+      }
       this.currentDistance = calculateTourDistanceByIndices(this.currentTour, this.cities);
       this.bestTour = [...this.currentTour];
       this.bestDistance = this.currentDistance;
@@ -134,7 +250,9 @@ export class HillClimbingRunner {
    *   bestTour: number[],
    *   currentDistance: number,
    *   bestDistance: number,
-   *   isLocalOptimum: boolean
+   *   isLocalOptimum: boolean,
+   *   improvementsCount: number,
+   *   foundImprovement: boolean
    * }}
    */
   step() {
@@ -147,6 +265,8 @@ export class HillClimbingRunner {
         currentDistance: this.currentDistance,
         bestDistance: this.bestDistance,
         isLocalOptimum: true,
+        improvementsCount: this.improvementsCount,
+        foundImprovement: false,
       };
     }
 
@@ -176,6 +296,7 @@ export class HillClimbingRunner {
           foundImprovement = true;
           this.stuckCounter = 0;
           this.isLocalOptimum = false;
+          this.improvementsCount++;
           break;
         }
       }
@@ -219,6 +340,7 @@ export class HillClimbingRunner {
         foundImprovement = true;
         this.stuckCounter = 0;
         this.isLocalOptimum = false;
+        this.improvementsCount++;
       } else {
         this.stuckCounter++;
       }
@@ -255,6 +377,8 @@ export class HillClimbingRunner {
       currentDistance: this.currentDistance,
       bestDistance: this.bestDistance,
       isLocalOptimum: this.isLocalOptimum,
+      improvementsCount: this.improvementsCount,
+      foundImprovement,
     };
   }
 }
